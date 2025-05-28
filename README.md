@@ -16,16 +16,9 @@ A Node.js application that crawls and converts web pages to Markdown format, des
 - Implements retry logic for failed conversions
 - Handles errors gracefully
 - Supports sitemap index files that contain multiple sitemaps
-
-## Features
-
-- Reads URLs from a text file or XML sitemap
-- Converts HTML web pages to Markdown format
-- Saves converted Markdown files to a local directory
-- Processes multiple URLs concurrently
-- Implements retry logic for failed conversions
-- Handles errors gracefully
-- Supports sitemap index files that contain multiple sitemaps
+- Organizes output to match URL directory structure
+- Supports various filename options (URL paths or page titles)
+- Preserves query parameters in URLs for unique filenames
 
 ## Prerequisites
 
