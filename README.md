@@ -38,6 +38,12 @@ cd crawl-web-to-md
 npm install
 ```
 
+3. Build the project:
+```bash
+npm run build
+```
+This compiles the TypeScript code into JavaScript in the `dist` directory.
+
 ## Dependencies
 
 This project uses the following main packages:
@@ -68,7 +74,11 @@ https://example.com/contact
 
 3. Run the application:
 ```bash
+# Development mode (using ts-node, no build required)
 npm start
+
+# OR use the built version (after running npm run build)
+node dist/index.js
 ```
 
 ### Using an XML Sitemap
@@ -84,10 +94,46 @@ npm start
 
 2. Run the application:
 ```bash
+# Development mode (using ts-node, no build required)
 npm start
+
+# OR use the built version (after running npm run build)
+node dist/index.js
 ```
 
 The converted Markdown files will be saved in the `dist` directory.
+
+### Command-Line Options
+
+You can also specify options directly from the command line:
+
+```bash
+# First build the project if you haven't already
+npm run build
+
+# Use a sitemap as the URL source
+node dist/index.js --sitemap=https://example.com/sitemap.xml
+
+# Use a URL file and output to a different directory
+node dist/index.js --url-file=myurls.txt --output-dir=output
+
+# Use page titles for filenames and a flat folder structure
+node dist/index.js --use-titles --flat-structure
+
+# Process URLs from a sitemap with more concurrent requests
+node dist/index.js -s https://example.com/sitemap.xml -c 5 -d
+```
+
+Available options:
+- `--output-dir=DIR`, `-o=DIR`: Set output directory
+- `--url-file=FILE`, `-f=FILE`: Set URL file source
+- `--sitemap=URL`, `-s=URL`: Set sitemap URL source
+- `--max-concurrent=NUM`, `-c=NUM`: Set maximum concurrent downloads
+- `--use-titles`, `-t`: Use page titles for filenames
+- `--use-url-paths`, `-u`: Use URL paths for filenames
+- `--domain-folders`, `-d`: Organize by domain folders
+- `--flat-structure`, `-n`: Use flat folder structure
+- `--help`, `-h`: Show help message
 
 ## Configuration
 
