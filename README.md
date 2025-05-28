@@ -448,4 +448,4 @@ When used for LLM context, consider:
 
 ## License
 
-ISC
+MIT licenses

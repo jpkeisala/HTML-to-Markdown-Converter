@@ -9,8 +9,8 @@
     "test:sitemap": "ts-node test-sitemap.ts",
     "sitemap": "ts-node src/index.ts --sitemap"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "Jukka-Pekka Keisala",
+  "license": "MIT",
   "description": "HTML to Markdown converter using Turndown",
   "dependencies": {
     "@types/jsdom": "^21.1.7",
