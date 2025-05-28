@@ -1,0 +1,256 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as fsExtra from 'fs-extra';
+import TurndownService from 'turndown';
+import axios from 'axios';
+import sanitize from 'sanitize-filename';
+
+// Configuration
+const URLS_FILE = 'urls.txt';
+const OUTPUT_DIR = 'dist';
+const MAX_CONCURRENT = 3; // Maximum number of concurrent conversions
+const TIMEOUT = 30000; // 30 seconds timeout for HTTP requests
+const RETRY_ATTEMPTS = 3; // Number of retry attempts for failed conversions
+const RETRY_DELAY = 3000; // Delay between retries in milliseconds
+
+/**
+ * Reads URLs from a file and returns them as an array
+ * @returns {Promise<string[]>} Array of URLs
+ */
+async function readUrlsFromFile(): Promise<string[]> {
+  try {
+    const content = await fs.promises.readFile(URLS_FILE, 'utf-8');
+    return content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('//'));
+  } catch (error: any) {
+    console.error(`Error reading URLs file: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Converts a URL to a valid filename
+ * @param {string} url URL to convert
+ * @returns {string} Valid filename
+ */
+function urlToFilename(url: string): string {
+  try {
+    // Create a URL object to properly parse the URL
+    const urlObj = new URL(url);
+    
+    // Get hostname without www
+    let filename = urlObj.hostname.replace(/^www\./, '');
+    
+    // Add pathname, removing the leading slash
+    const pathname = urlObj.pathname.replace(/^\/|\/$/g, '');
+    if (pathname) {
+      filename += '-' + pathname.replace(/\//g, '-');
+    }
+    
+    // Sanitize the filename and trim any leading/trailing hyphens
+    filename = sanitize(filename).replace(/^-+|-+$/g, '');
+    
+    // Add .md extension
+    return `${filename}.md`;
+  } catch (error) {
+    // Fallback to the old method if URL parsing fails
+    // Remove protocol and www
+    let filename = url.replace(/^https?:\/\/(www\.)?/, '');
+    
+    // Remove query parameters and anchors
+    filename = filename.split(/[?#]/)[0];
+    
+    // Replace trailing slash
+    filename = filename.replace(/\/$/, '');
+    
+    // Replace slashes with hyphens
+    filename = filename.replace(/\//g, '-');
+    
+    // Sanitize the filename
+    filename = sanitize(filename);
+    
+    // Add .md extension
+    return `${filename}.md`;
+  }
+}
+
+/**
+ * Fetches HTML content from a URL
+ * @param {string} url URL to fetch
+ * @returns {Promise<string>} HTML content
+ */
+async function fetchHtmlContent(url: string, retryCount = 0): Promise<string> {
+  try {
+    console.log(`Fetching: ${url}`);
+    
+    const response = await axios.get(url, {
+      timeout: TIMEOUT,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      }
+    });
+    
+    if (response.status !== 200) {
+      throw new Error(`Failed to fetch HTML content: ${response.statusText}`);
+    }
+    
+    return response.data;
+  } catch (error: any) {
+    if (retryCount < RETRY_ATTEMPTS) {
+      console.warn(`Error fetching ${url}, retrying (${retryCount + 1}/${RETRY_ATTEMPTS}): ${error.message}`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchHtmlContent(url, retryCount + 1);
+    } else {
+      console.error(`Failed to fetch ${url} after ${RETRY_ATTEMPTS} attempts: ${error.message}`);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Converts HTML to Markdown using Turndown
+ * @param {string} url URL to convert
+ * @returns {Promise<string>} Markdown content
+ */
+async function convertHtmlToMarkdown(url: string, retryCount = 0): Promise<string> {
+  try {
+    console.log(`Converting: ${url}`);
+    
+    // Fetch HTML content
+    const htmlContent = await fetchHtmlContent(url);
+    
+    // Set up Turndown options
+    const turndownService = new TurndownService({
+      headingStyle: 'atx',
+      hr: '---',
+      bulletListMarker: '-',
+      codeBlockStyle: 'fenced',
+      emDelimiter: '*',
+      linkStyle: 'referenced',
+      strongDelimiter: '**'
+    });
+    
+    // Add rules to improve conversion
+    turndownService.addRule('removeComments', {
+      filter: function(node) {
+        return node.nodeType === 8; // Comment node
+      },
+      replacement: function() {
+        return '';
+      }
+    });
+    
+    // Preserve line breaks
+    turndownService.addRule('lineBreaks', {
+      filter: ['br'],
+      replacement: function() {
+        return '\n';
+      }
+    });
+    
+    // Handle tables better
+    turndownService.addRule('tableStyle', {
+      filter: ['table'],
+      replacement: function(content) {
+        return '\n\n' + content + '\n\n';
+      }
+    });
+    
+    // Convert HTML to Markdown
+    const markdownContent = turndownService.turndown(htmlContent);
+    
+    if (!markdownContent) {
+      throw new Error('Failed to convert HTML to markdown');
+    }
+    
+    // Add URL reference at the top
+    return `<!-- Source: ${url} -->\n\n${markdownContent}`;
+  } catch (error: any) {
+    if (retryCount < RETRY_ATTEMPTS) {
+      console.warn(`Error converting ${url}, retrying (${retryCount + 1}/${RETRY_ATTEMPTS}): ${error.message}`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return convertHtmlToMarkdown(url, retryCount + 1);
+    } else {
+      console.error(`Failed to convert ${url} after ${RETRY_ATTEMPTS} attempts: ${error.message}`);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Processes a URL to convert it to markdown and save to disk
+ * @param {string} url URL to process
+ */
+async function processUrl(url: string): Promise<void> {
+  try {
+    const markdown = await convertHtmlToMarkdown(url);
+    const filename = urlToFilename(url);
+    const outputPath = path.join(OUTPUT_DIR, filename);
+    
+    // Ensure output directory exists
+    await fsExtra.ensureDir(OUTPUT_DIR);
+    
+    // Write markdown to file
+    await fs.promises.writeFile(outputPath, markdown, 'utf-8');
+    console.log(`✅ Saved: ${outputPath}`);
+  } catch (error: any) {
+    console.error(`❌ Error processing ${url}: ${error.message}`);
+  }
+}
+
+/**
+ * Process URLs in batches to limit concurrency
+ * @param {string[]} urls Array of URLs to process
+ */
+async function processUrlsInBatches(urls: string[]): Promise<void> {
+  let completed = 0;
+  const total = urls.length;
+  
+  // Process URLs in batches to limit concurrency
+  for (let i = 0; i < total; i += MAX_CONCURRENT) {
+    const batch = urls.slice(i, i + MAX_CONCURRENT);
+    await Promise.all(batch.map(url => processUrl(url)));
+    
+    completed += batch.length;
+    const percentage = Math.round((completed / total) * 100);
+    console.log(`Progress: ${completed}/${total} (${percentage}%)`);
+  }
+}
+
+/**
+ * Main function
+ */
+async function main() {
+  try {
+    console.log('🚀 Starting HTML to Markdown conversion');
+    console.log(`📁 Output directory: ${OUTPUT_DIR}`);
+    
+    // Ensure output directory exists
+    await fsExtra.ensureDir(OUTPUT_DIR);
+    
+    // Read URLs from file
+    const urls = await readUrlsFromFile();
+    
+    if (urls.length === 0) {
+      console.warn('⚠️ No URLs found in file');
+      return;
+    }
+    
+    console.log(`📋 Found ${urls.length} URLs to process`);
+    
+    // Process URLs
+    await processUrlsInBatches(urls);
+    
+    console.log('✨ Conversion completed successfully');
+  } catch (error: any) {
+    console.error(`🔥 Fatal error: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+// Run the app
+main().catch(console.error);

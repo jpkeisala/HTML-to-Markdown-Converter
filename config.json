@@ -1,0 +1,48 @@
+{
+  "outputDir": "dist",
+  "maxConcurrent": 3,
+  "timeout": 30000,
+  "retryAttempts": 3,
+  "retryDelay": 3000,
+  "urlSource": {
+    "type": "file",
+    "file": "urls.txt",
+    "sitemap": ""
+  },
+  "selectors": {
+    "exclude": [
+      "footer",
+      "header",
+      "nav",
+      "script",
+      "style",
+      ".cookie-banner",
+      "#sidebar",
+      "[class*='cookie']",
+      "[class*='tracking']",
+      "[class*='analytics']"
+    ],
+    "unwrap": [
+      ".container",
+      ".wrapper"
+    ],
+    "removeAttributes": true
+  },
+  "turndownOptions": {
+    "headingStyle": "atx",
+    "hr": "---",
+    "bulletListMarker": "-",
+    "codeBlockStyle": "fenced",
+    "emDelimiter": "*",
+    "linkStyle": "referenced",
+    "strongDelimiter": "**"
+  },
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36",
+  "fileOptions": {
+    "addSourceUrl": true,
+    "addDate": true,
+    "useDomainSubfolders": true,
+    "usePageTitlesForFilenames": true,
+    "preserveUrlFilenames": true
+  }
+}
