@@ -8,9 +8,10 @@ export class HtmlProcessor {
   /**
    * Process HTML content according to configuration
    * @param html HTML content
+   * @param pageUrl The original page URL (for resolving relative media paths)
    * @returns Processed HTML
    */
-  public static process(html: string): string {
+  public static process(html: string, pageUrl?: string): string {
     try {
       const dom = new JSDOM(html);
       const document = dom.window.document;
@@ -18,10 +19,75 @@ export class HtmlProcessor {
       // Apply selectors from config
       this.applySelectors(document);
       
+      // Absolutize media URLs if pageUrl is provided
+      if (pageUrl) {
+        this.absolutizeMediaUrls(document, pageUrl);
+      }
+      
       return document.documentElement.outerHTML;
     } catch (error: any) {
       console.error(`Error processing HTML: ${error.message}`);
       return html; // Return original HTML if processing fails
+    }
+  }
+
+  /**
+   * Convert relative media URLs (img, audio, video, source) to absolute using the page's origin
+   */
+  private static absolutizeMediaUrls(document: Document, pageUrl: string): void {
+    let origin: string;
+    try {
+      origin = new URL(pageUrl).origin;
+    } catch {
+      return;
+    }
+    // List of media tags and their src attributes
+    const mediaTags = [
+      { tag: 'img', attr: 'src' },
+      { tag: 'audio', attr: 'src' },
+      { tag: 'video', attr: 'src' },
+      { tag: 'source', attr: 'src' },
+      { tag: 'picture', attr: 'src' },
+    ];
+    for (const { tag, attr } of mediaTags) {
+      const elements = document.getElementsByTagName(tag);
+      for (const el of Array.from(elements)) {
+        const val = el.getAttribute(attr);
+        if (val && val.startsWith('/')) {
+          // Avoid protocol-relative URLs (//example.com)
+          if (!val.startsWith('//')) {
+            el.setAttribute(attr, origin + val);
+          }
+        }
+      }
+    }
+    // Also fix Markdown-style images in <a> or <img> alt attributes (rare, but for completeness)
+    const markdownImageRegex = /!\[.*?\]\((\/[^)]+)\)/g;
+    const anchors = document.getElementsByTagName('a');
+    for (const anchor of Array.from(anchors)) {
+      const href = anchor.getAttribute('href');
+      if (href && href.startsWith('/')) {
+        // Avoid protocol-relative URLs
+        if (!href.startsWith('//')) {
+          anchor.setAttribute('href', origin + href);
+        }
+      }
+      // Fix Markdown-style image in alt attribute
+      const alt = anchor.getAttribute('alt');
+      if (alt) {
+        anchor.setAttribute('alt', alt.replace(markdownImageRegex, (_, p1) => {
+          return `![Image](${origin}${p1})`;
+        }));
+      }
+    }
+    const images = document.getElementsByTagName('img');
+    for (const img of Array.from(images)) {
+      const alt = img.getAttribute('alt');
+      if (alt) {
+        img.setAttribute('alt', alt.replace(markdownImageRegex, (_, p1) => {
+          return `![Image](${origin}${p1})`;
+        }));
+      }
     }
   }
 

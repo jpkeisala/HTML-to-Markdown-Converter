@@ -266,7 +266,7 @@ async function convertHtmlToMarkdown(url: string, retryCount = 0): Promise<strin
     let htmlContent = await fetchHtmlContent(url);
     
     // Process HTML using the HTML processor
-    htmlContent = HtmlProcessor.process(htmlContent);
+    htmlContent = HtmlProcessor.process(htmlContent, url);
     
     // Set up Turndown with default options first
     const turndownService = new TurndownService();
@@ -453,7 +453,7 @@ async function processUrl(url: string): Promise<void> {
     let markdown: string;
     if (htmlContent) {
       // Process HTML using the HTML processor
-      const processedHtml = HtmlProcessor.process(htmlContent);
+      const processedHtml = HtmlProcessor.process(htmlContent, url);
       markdown = await convertHtmlWithContent(url, processedHtml);
     } else {
       markdown = await convertHtmlToMarkdown(url);
